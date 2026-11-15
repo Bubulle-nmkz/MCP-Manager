@@ -2,7 +2,7 @@
 [Setup]
 AppId={{A2EE16A2-5315-4B01-93B3-925D738B0C10}
 AppName=MCP Manager
-AppVersion=1.0.1
+AppVersion=1.0.2
 AppPublisher=MCP Manager
 DefaultDirName={autopf}\MCP Manager
 DefaultGroupName=MCP Manager
