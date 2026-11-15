@@ -84,7 +84,7 @@ class _HubHomeState extends State<HubHome> with WindowListener, TrayListener {
   bool autoStartAllServers = false;
   bool hasTriggeredAutoStart = false;
   bool isCheckingUpdates = false;
-  static const String appVersion = 'v1.0.2';
+  static const String appVersion = 'v1.0.0';
   static const String githubRepo = 'Bubulle-nmkz/MCP-Manager';
   String tunnelProvider = 'tailscale';
   final TextEditingController portController = TextEditingController();
@@ -1432,45 +1432,58 @@ class _HubHomeState extends State<HubHome> with WindowListener, TrayListener {
       String htmlUrl = 'https://github.com/$githubRepo/releases';
       String body = '';
       bool reachable = false;
+      String errorMsg = '';
 
-      // 1. Vérification des Releases GitHub officielles
-      final releaseUrl = Uri.parse('https://api.github.com/repos/$githubRepo/releases/latest');
-      final resp = await http.get(releaseUrl, headers: {
-        'Accept': 'application/vnd.github.v3+json',
-        'User-Agent': 'MCP-Manager-Updater',
-      }).timeout(const Duration(seconds: 8));
+      // 1. Requête principale : API GitHub Releases
+      try {
+        final releaseUrl = Uri.parse('https://api.github.com/repos/$githubRepo/releases/latest');
+        final resp = await http.get(releaseUrl, headers: {
+          'Accept': 'application/vnd.github.v3+json',
+          'User-Agent': 'MCP-Manager-Client',
+        }).timeout(const Duration(seconds: 10));
 
-      if (resp.statusCode == 200) {
-        reachable = true;
-        final data = jsonDecode(resp.body);
-        tag = (data['tag_name'] ?? '').toString().replaceFirst(RegExp(r'^v'), '');
-        htmlUrl = (data['html_url'] ?? htmlUrl).toString();
-        body = (data['body'] ?? '').toString();
-      } else {
-        // 2. Fallback sur version.json de la branche main (évite le 404 quand aucune Release n'est publiée)
-        final rawUrl = Uri.parse('https://raw.githubusercontent.com/$githubRepo/main/version.json');
-        final rawResp = await http.get(rawUrl, headers: {
-          'User-Agent': 'MCP-Manager-Updater',
-        }).timeout(const Duration(seconds: 8));
-
-        if (rawResp.statusCode == 200) {
-          reachable = true;
-          final data = jsonDecode(rawResp.body);
-          tag = (data['version'] ?? '').toString().replaceFirst(RegExp(r'^v'), '');
-          htmlUrl = (data['release_url'] ?? htmlUrl).toString();
-          body = (data['notes'] ?? '').toString();
+        if (resp.statusCode == 200) {
+          final data = jsonDecode(resp.body);
+          final rawTag = (data['tag_name'] ?? '').toString();
+          tag = rawTag.replaceFirst(RegExp(r'^v', caseSensitive: false), '').trim();
+          htmlUrl = (data['html_url'] ?? htmlUrl).toString();
+          body = (data['body'] ?? '').toString();
+          if (tag.isNotEmpty) reachable = true;
         } else {
-          // Si version.json n'est pas joignable (ex: repo privé 404), on considère l'app à jour
-          reachable = true;
-          tag = appVersion.replaceFirst(RegExp(r'^v'), '');
+          errorMsg = 'GitHub API code: ${resp.statusCode}';
+        }
+      } catch (e) {
+        errorMsg = 'Erreur GitHub API: $e';
+      }
+
+      // 2. Si l'API échoue (rate-limit ou autre), fallback sur version.json de la branche main
+      if (!reachable) {
+        try {
+          final rawUrl = Uri.parse('https://raw.githubusercontent.com/$githubRepo/main/version.json');
+          final rawResp = await http.get(rawUrl, headers: {
+            'User-Agent': 'MCP-Manager-Client',
+          }).timeout(const Duration(seconds: 10));
+
+          if (rawResp.statusCode == 200) {
+            final data = jsonDecode(rawResp.body);
+            final rawVersion = (data['version'] ?? '').toString();
+            tag = rawVersion.replaceFirst(RegExp(r'^v', caseSensitive: false), '').trim();
+            htmlUrl = (data['release_url'] ?? htmlUrl).toString();
+            body = (data['notes'] ?? '').toString();
+            if (tag.isNotEmpty) reachable = true;
+          } else {
+            errorMsg = 'GitHub Raw code: ${rawResp.statusCode}';
+          }
+        } catch (e) {
+          errorMsg = 'Erreur GitHub Raw: $e';
         }
       }
 
-      if (reachable) {
-        final cleanCurrent = appVersion.replaceFirst(RegExp(r'^v'), '');
-        final cleanTag = tag.replaceFirst(RegExp(r'^v'), '');
+      if (reachable && tag.isNotEmpty) {
+        final cleanCurrent = appVersion.replaceFirst(RegExp(r'^v', caseSensitive: false), '').trim();
+        final cleanTag = tag;
 
-        // Comparaison sémantique propre (X.Y.Z) pour ne proposer que des versions STRICTEMENT supérieures
+        // Comparaison sémantique propre (X.Y.Z)
         bool isNewer = false;
         try {
           final curParts = cleanCurrent.split('.').map((e) => int.tryParse(e) ?? 0).toList();
@@ -1500,8 +1513,8 @@ class _HubHomeState extends State<HubHome> with WindowListener, TrayListener {
           }
         } else if (manual && mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Vous utilisez déjà la dernière version disponible ($appVersion).'),
+            SnackBar(
+              content: Text('Vous utilisez déjà la dernière version disponible ($appVersion). Dernière version en ligne : v$cleanTag.'),
               backgroundColor: mint,
             ),
           );
@@ -1509,7 +1522,7 @@ class _HubHomeState extends State<HubHome> with WindowListener, TrayListener {
       } else if (manual && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Impossible de joindre GitHub (Code ${resp.statusCode}).'),
+            content: Text('Impossible de vérifier les mises à jour ($errorMsg). Vérifiez votre connexion Internet.'),
             backgroundColor: Colors.orangeAccent,
           ),
         );
