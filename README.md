@@ -33,10 +33,11 @@ Les **MCP** (*Model Context Protocol*) sont des connecteurs qui permettent aux i
 C'est la méthode la plus simple pour les utilisateurs.
 
 1. Allez dans l'onglet **[Releases](../../releases)** sur la droite de cette page GitHub.
-2. Téléchargez le fichier **`MCP-Manager-Setup.exe`**.
+2. Téléchargez la dernière version du fichier **`MCP-Manager-Setup.exe`**.
 3. Double-cliquez sur le fichier téléchargé.
 4. Suivez l'assistant d'installation (cliquez sur *Suivant* puis *Installer*).
 5. **C'est tout !** L'application est installée dans `C:\Program Files\MCP Manager`, et son raccourci officiel avec logo bleu apparaît directement sur votre Bureau.
+6. Pour qu'elle soit fonctionnelle à 100% il faut suivre les étapes suivantes pour **télécharger et installer** [Tailscale Funnel](#-tutoriel-débutant--installer-et-connecter-tailscale-funnel)
 
 ---
 
