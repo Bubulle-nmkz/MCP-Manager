@@ -32,7 +32,7 @@ class HubApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) => MaterialApp(
         debugShowCheckedModeBanner: false,
-        title: 'MCP Manager v3',
+        title: 'MCP Manager',
         theme: ThemeData(
           useMaterial3: true,
           brightness: Brightness.dark,
@@ -113,7 +113,7 @@ class _HubHomeState extends State<HubHome> with WindowListener, TrayListener {
           File('${dir.path}${Platform.pathSeparator}mcp-manager.ico');
       await icon.writeAsBytes(data.buffer.asUint8List());
       await trayManager.setIcon(icon.path);
-      await trayManager.setToolTip('MCP Manager v3');
+      await trayManager.setToolTip('MCP Manager');
       await trayManager.setContextMenu(Menu(items: [
         MenuItem(key: 'show', label: 'Afficher'),
         MenuItem.separator(),
@@ -519,7 +519,7 @@ class _HubHomeState extends State<HubHome> with WindowListener, TrayListener {
             children: [
               Text(
                 page == 'overview'
-                    ? 'MCP Manager v3'
+                    ? 'MCP Manager'
                     : page == 'logs'
                         ? 'Journaux en direct'
                         : 'Paramètres de la passerelle',
@@ -757,7 +757,7 @@ class _HubHomeState extends State<HubHome> with WindowListener, TrayListener {
     final displayUrl = kind == 'remote' ? mammouthUrl : fixedUrl;
     final urlLabel = kind == 'remote' ? 'URL MAMMOUTH :' : 'URL FIXE :';
     final kindLabel = kind == 'local_http'
-        ? 'HTTP SERVEUR'
+        ? 'HTTPS SERVEUR'
         : kind == 'remote'
             ? 'DISTANT HTTPS'
             : 'LOCAL STDIO';
@@ -916,7 +916,7 @@ class _HubHomeState extends State<HubHome> with WindowListener, TrayListener {
                           'URL Mammouth AI complète (avec secret /mcp) copiée !'),
                   child: const Tooltip(
                     message:
-                        'Copier l’URL complète pour Mammouth AI (inclut le token + /mcp)',
+                        'Copier l’URL complète pour Mammouth AI (inclut /mcp)',
                     child: Padding(
                       padding: EdgeInsets.symmetric(horizontal: 4),
                       child: Icon(Icons.cloud_done_rounded,
@@ -1519,7 +1519,7 @@ class _UniversalImportDialogState extends State<UniversalImportDialog>
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const Text(
-                          'Sélectionnez n’importe quel dossier MCP (ex: mcp-montage, opus-flutter-mcp), une archive .zip ou un fichier serveur (.js, .py, .ts, package.json, etc.). L’application configure et lance le MCP sans modifier vos fichiers d’origine.',
+                          'Sélectionnez n’importe quel dossier MCP, une archive .zip ou un fichier serveur (.js, .py, .ts, package.json, etc.). L’application configure et lance le MCP sans modifier vos fichiers d’origine.',
                           style: TextStyle(color: muted, fontSize: 12.5),
                         ),
                         const SizedBox(height: 12),
