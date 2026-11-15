@@ -1,13 +1,18 @@
-name: Release Build
+name: Build and Release MCP Manager
 
 on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build:
     runs-on: windows-latest
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -22,26 +27,18 @@ jobs:
           cache: true
 
       - name: Install Inno Setup
-        run: choco install innosetup --no-progress
+        run: |
+          choco install innosetup -y --no-progress
 
       - name: Build Application & Installer
-        shell: pwsh
         run: |
           .\scripts\build.ps1
-          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" .\scripts\installer.iss
 
-      - name: Create GitHub Release and Upload Asset
+      - name: Create or Update GitHub Release and Upload Asset
         uses: softprops/action-gh-release@v2
         with:
           files: dist/MCP-Manager-Setup.exe
-          name: MCP Manager ${{ github.ref_name }}
-          body: |
-            ## 🚀 Nouveautés de la version ${{ github.ref_name }}
-            - Logo officiel MCP Manager intégré partout (barre des tâches, tray, bureau, raccourcis).
-            - Option de démarrage automatique de tous les MCP au lancement de l'application.
-            - Système de détection de mise à jour automatique via GitHub.
-            - Installateur tout-en-un `MCP-Manager-Setup.exe`.
-          draft: false
-          prerelease: false
+          fail_on_unmatched_files: true
+          generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
