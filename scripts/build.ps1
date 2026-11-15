@@ -14,13 +14,17 @@ Write-Host '[0/6] Fermeture des instances en cours de MCP Manager…'
 Get-Process -Name 'mcp_hub','MCP-Manager','mcp-hub-core','mcp_hub_core' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
 Start-Sleep -Milliseconds 600
 
-Write-Host '[1/6] Génération haute définition des icônes (.ico et .png) pour Bureau, Barre des tâches et Zone de notification…'
-if (Test-Path $LogoPng) {
+Write-Host '[1/6] Vérification des icônes (.ico et .png)…'
+if ((Test-Path $LogoPng) -and ($LogoPng -ne $AssetsPng)) {
   Copy-Item $LogoPng $AssetsPng -Force
 }
 
 Add-Type -AssemblyName System.Drawing
 function Convert-PngToMultiIco([string]$sourcePng, [string]$destIco) {
+  if (-not (Test-Path $sourcePng)) {
+    Write-Warning "Fichier source PNG introuvable : $sourcePng"
+    return
+  }
   $srcImg = [System.Drawing.Image]::FromFile($sourcePng)
   $sizes = @(16, 24, 32, 48, 64, 128, 256)
   $pngStreams = New-Object System.Collections.Generic.List[byte[]]
@@ -72,9 +76,14 @@ function Convert-PngToMultiIco([string]$sourcePng, [string]$destIco) {
   $fs.Close()
 }
 
-Convert-PngToMultiIco $AssetsPng $AssetsIco
-Convert-PngToMultiIco $AssetsPng $RunnerIco
+if (Test-Path $AssetsPng) {
+  Convert-PngToMultiIco $AssetsPng $AssetsIco
+  Convert-PngToMultiIco $AssetsPng $RunnerIco
+} elseif (-not (Test-Path $RunnerIco)) {
+  Write-Warning "Aucune icône source trouvée."
+}
 
+# Forcer CMake/Visual Studio à recompiler les ressources Windows (.rc) avec la nouvelle icône
 $RcFile = Join-Path $Flutter 'windows\runner\Runner.rc'
 if (Test-Path $RcFile) {
   (Get-Item $RcFile).LastWriteTime = Get-Date
