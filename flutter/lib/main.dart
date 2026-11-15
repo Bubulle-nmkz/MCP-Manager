@@ -84,7 +84,7 @@ class _HubHomeState extends State<HubHome> with WindowListener, TrayListener {
   bool autoStartAllServers = false;
   bool hasTriggeredAutoStart = false;
   bool isCheckingUpdates = false;
-  static const String appVersion = 'v1.0.0';
+  static const String appVersion = 'v1.0.2';
   static const String githubRepo = 'Bubulle-nmkz/MCP-Manager';
   String tunnelProvider = 'tailscale';
   final TextEditingController portController = TextEditingController();
