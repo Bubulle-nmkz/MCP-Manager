@@ -1,0 +1,15 @@
+# Généré par opus-flutter-mcp : exclut le bruit des projets Flutter du graphe.
+build/
+.dart_tool/
+.idea/
+.gradle/
+.fvm/
+android/.gradle/
+android/app/build/
+ios/Pods/
+ios/.symlinks/
+**/ephemeral/
+*.g.dart
+*.freezed.dart
+*.mocks.dart
+generated_plugin_registrant.dart
