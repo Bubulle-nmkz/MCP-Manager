@@ -89,13 +89,13 @@ BEGIN
     BEGIN
         BLOCK "040904e4"
         BEGIN
-            VALUE "CompanyName", "com.example" "\0"
-            VALUE "FileDescription", "mcp_hub" "\0"
+            VALUE "CompanyName", "MCP Manager" "\0"
+            VALUE "FileDescription", "MCP Manager" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "mcp_hub" "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2026 com.example. All rights reserved." "\0"
-            VALUE "OriginalFilename", "mcp_hub.exe" "\0"
-            VALUE "ProductName", "mcp_hub" "\0"
+            VALUE "InternalName", "MCP-Manager" "\0"
+            VALUE "LegalCopyright", "Copyright (C) 2026 MCP Manager. All rights reserved." "\0"
+            VALUE "OriginalFilename", "MCP-Manager.exe" "\0"
+            VALUE "ProductName", "MCP Manager" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

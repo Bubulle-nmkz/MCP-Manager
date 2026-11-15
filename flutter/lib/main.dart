@@ -81,6 +81,11 @@ class _HubHomeState extends State<HubHome> with WindowListener, TrayListener {
   List<Map<String, dynamic>> servers = [];
   String page = 'overview', query = '';
   bool busy = true, connected = false, startWindows = false, enableTunnel = true;
+  bool autoStartAllServers = false;
+  bool hasTriggeredAutoStart = false;
+  bool isCheckingUpdates = false;
+  static const String appVersion = 'v1.0.0';
+  static const String githubRepo = 'Bubulle-nmkz/MCP-Manager';
   String tunnelProvider = 'tailscale';
   final TextEditingController portController = TextEditingController();
   final TextEditingController publicUrlController = TextEditingController();
@@ -96,7 +101,30 @@ class _HubHomeState extends State<HubHome> with WindowListener, TrayListener {
       trayManager.addListener(this);
       _setupTray();
     }
+    _loadAutoStartSetting();
     _connect();
+    Future.delayed(const Duration(seconds: 3), () => _checkForUpdates(manual: false));
+  }
+
+  File _getAutoStartConfigFile() {
+    final appData = Platform.environment['APPDATA'] ?? Directory.systemTemp.path;
+    final dir = Directory('$appData${Platform.pathSeparator}MCPManager');
+    if (!dir.existsSync()) {
+      dir.createSync(recursive: true);
+    }
+    return File('${dir.path}${Platform.pathSeparator}auto_start_servers.json');
+  }
+
+  Future<void> _loadAutoStartSetting() async {
+    try {
+      final f = _getAutoStartConfigFile();
+      if (await f.exists()) {
+        final j = jsonDecode(await f.readAsString());
+        if (mounted) {
+          setState(() => autoStartAllServers = j['autoStartAllServers'] == true);
+        }
+      }
+    } catch (_) {}
   }
 
   @override
@@ -113,7 +141,7 @@ class _HubHomeState extends State<HubHome> with WindowListener, TrayListener {
           File('${dir.path}${Platform.pathSeparator}mcp-manager.ico');
       await icon.writeAsBytes(data.buffer.asUint8List());
       await trayManager.setIcon(icon.path);
-      await trayManager.setToolTip('MCP Manager v3');
+      await trayManager.setToolTip('MCP Manager');
       await trayManager.setContextMenu(Menu(items: [
         MenuItem(key: 'show', label: 'Afficher'),
         MenuItem.separator(),
@@ -249,6 +277,10 @@ class _HubHomeState extends State<HubHome> with WindowListener, TrayListener {
             busy = false;
             connected = true;
           });
+          if (autoStartAllServers && !hasTriggeredAutoStart && servers.isNotEmpty) {
+            hasTriggeredAutoStart = true;
+            _triggerAutoStartAll();
+          }
         }
       }
     } catch (_) {
@@ -436,6 +468,8 @@ class _HubHomeState extends State<HubHome> with WindowListener, TrayListener {
     timer?.cancel();
     portController.dispose();
     publicUrlController.dispose();
+    ngrokDomainController.dispose();
+    ngrokTokenController.dispose();
     if (Platform.isWindows) {
       windowManager.removeListener(this);
       trayManager.removeListener(this);
@@ -463,14 +497,23 @@ class _HubHomeState extends State<HubHome> with WindowListener, TrayListener {
             labelType: NavigationRailLabelType.all,
             leading: Padding(
               padding: const EdgeInsets.fromLTRB(0, 20, 0, 28),
-              child: Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: mint,
-                  borderRadius: BorderRadius.circular(13),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(13),
+                child: Image.asset(
+                  'assets/mcp-manager.png',
+                  width: 44,
+                  height: 44,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: mint,
+                      borderRadius: BorderRadius.circular(13),
+                    ),
+                    child: const Icon(Icons.hub_rounded, color: ink),
+                  ),
                 ),
-                child: const Icon(Icons.hub_rounded, color: ink),
               ),
             ),
             destinations: const [
@@ -1285,38 +1328,68 @@ class _HubHomeState extends State<HubHome> with WindowListener, TrayListener {
                 value: startWindows,
                 onChanged: (v) => setState(() => startWindows = v),
               ),
-              const SizedBox(height: 12),
-              FilledButton.icon(
-                onPressed: () async {
-                  final p = int.tryParse(portController.text);
-                  if (p == null || p < 1 || p > 65535) return;
-                  await http.post(
-                    Uri.parse('$base/admin/settings'),
-                    headers: headers,
-                    body: jsonEncode({
-                      'port': p,
-                      'tunnelProvider': tunnelProvider,
-                      'enableTunnel': tunnelProvider != 'local',
-                      'ngrokDomain': ngrokDomainController.text.trim(),
-                      'ngrokAuthToken': ngrokTokenController.text.trim(),
-                      'publicBaseUrl': tunnelProvider == 'local'
-                          ? ''
-                          : publicUrlController.text.trim(),
-                      'startWithWindows': startWindows,
-                      'appPath': Platform.resolvedExecutable,
-                    }),
-                  );
-                  await _load();
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Paramètres d’URL permanente enregistrés avec succès.'),
-                      ),
-                    );
-                  }
+              const SizedBox(height: 8),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Démarrer tous les MCP à l’ouverture'),
+                subtitle: const Text(
+                  'Lance automatiquement tous les serveurs MCP configurés dès l’ouverture de l’application (désactivé par défaut).',
+                  style: TextStyle(color: muted, fontSize: 12),
+                ),
+                value: autoStartAllServers,
+                onChanged: (v) async {
+                  setState(() => autoStartAllServers = v);
+                  await _saveAutoStartSetting(v);
                 },
-                icon: const Icon(Icons.save_outlined),
-                label: const Text('Enregistrer'),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  FilledButton.icon(
+                    onPressed: () async {
+                      final p = int.tryParse(portController.text);
+                      if (p == null || p < 1 || p > 65535) return;
+                      await http.post(
+                        Uri.parse('$base/admin/settings'),
+                        headers: headers,
+                        body: jsonEncode({
+                          'port': p,
+                          'tunnelProvider': tunnelProvider,
+                          'enableTunnel': tunnelProvider != 'local',
+                          'ngrokDomain': ngrokDomainController.text.trim(),
+                          'ngrokAuthToken': ngrokTokenController.text.trim(),
+                          'publicBaseUrl': tunnelProvider == 'local'
+                              ? ''
+                              : publicUrlController.text.trim(),
+                          'startWithWindows': startWindows,
+                          'appPath': Platform.resolvedExecutable,
+                        }),
+                      );
+                      await _load();
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Paramètres d’URL permanente enregistrés avec succès.'),
+                          ),
+                        );
+                      }
+                    },
+                    icon: const Icon(Icons.save_outlined),
+                    label: const Text('Enregistrer'),
+                  ),
+                  const SizedBox(width: 14),
+                  OutlinedButton.icon(
+                    onPressed: isCheckingUpdates ? null : () => _checkForUpdates(manual: true),
+                    icon: isCheckingUpdates
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.refresh_rounded),
+                    label: Text(isCheckingUpdates ? 'Recherche...' : 'Recherche de mise à jour'),
+                  ),
+                ],
               ),
               const SizedBox(height: 16),
               Text(
@@ -1327,6 +1400,195 @@ class _HubHomeState extends State<HubHome> with WindowListener, TrayListener {
           ),
         ),
       );
+
+  Future<void> _saveAutoStartSetting(bool val) async {
+    setState(() => autoStartAllServers = val);
+    try {
+      final f = _getAutoStartConfigFile();
+      await f.writeAsString(jsonEncode({'autoStartAllServers': val}));
+    } catch (_) {}
+  }
+
+  Future<void> _triggerAutoStartAll() async {
+    for (final s in servers) {
+      final running = s['running'] == true || s['status'] == 'running';
+      if (!running && s['id'] != null) {
+        try {
+          await http.post(
+            Uri.parse('$base/admin/servers/${s['id']}/start'),
+            headers: headers,
+          );
+        } catch (_) {}
+      }
+    }
+    await _load();
+  }
+
+  Future<void> _checkForUpdates({bool manual = false}) async {
+    if (isCheckingUpdates) return;
+    setState(() => isCheckingUpdates = true);
+    try {
+      String tag = '';
+      String htmlUrl = 'https://github.com/$githubRepo/releases';
+      String body = '';
+      bool reachable = false;
+
+      // 1. Vérification des Releases GitHub officielles
+      final releaseUrl = Uri.parse('https://api.github.com/repos/$githubRepo/releases/latest');
+      final resp = await http.get(releaseUrl, headers: {
+        'Accept': 'application/vnd.github.v3+json',
+        'User-Agent': 'MCP-Manager-Updater',
+      }).timeout(const Duration(seconds: 8));
+
+      if (resp.statusCode == 200) {
+        reachable = true;
+        final data = jsonDecode(resp.body);
+        tag = (data['tag_name'] ?? '').toString().replaceFirst(RegExp(r'^v'), '');
+        htmlUrl = (data['html_url'] ?? htmlUrl).toString();
+        body = (data['body'] ?? '').toString();
+      } else {
+        // 2. Fallback sur version.json de la branche main (évite le 404 quand aucune Release n'est publiée)
+        final rawUrl = Uri.parse('https://raw.githubusercontent.com/$githubRepo/main/version.json');
+        final rawResp = await http.get(rawUrl, headers: {
+          'User-Agent': 'MCP-Manager-Updater',
+        }).timeout(const Duration(seconds: 8));
+
+        if (rawResp.statusCode == 200) {
+          reachable = true;
+          final data = jsonDecode(rawResp.body);
+          tag = (data['version'] ?? '').toString().replaceFirst(RegExp(r'^v'), '');
+          htmlUrl = (data['release_url'] ?? htmlUrl).toString();
+          body = (data['notes'] ?? '').toString();
+        } else {
+          // Si version.json n'est pas joignable (ex: repo privé 404), on considère l'app à jour
+          reachable = true;
+          tag = appVersion.replaceFirst(RegExp(r'^v'), '');
+        }
+      }
+
+      if (reachable) {
+        final cleanCurrent = appVersion.replaceFirst(RegExp(r'^v'), '');
+        final cleanTag = tag.replaceFirst(RegExp(r'^v'), '');
+
+        // Comparaison sémantique propre (X.Y.Z) pour ne proposer que des versions STRICTEMENT supérieures
+        bool isNewer = false;
+        try {
+          final curParts = cleanCurrent.split('.').map((e) => int.tryParse(e) ?? 0).toList();
+          final newParts = cleanTag.split('.').map((e) => int.tryParse(e) ?? 0).toList();
+          while (curParts.length < 3) {
+            curParts.add(0);
+          }
+          while (newParts.length < 3) {
+            newParts.add(0);
+          }
+
+          for (int i = 0; i < 3; i++) {
+            if (newParts[i] > curParts[i]) {
+              isNewer = true;
+              break;
+            } else if (newParts[i] < curParts[i]) {
+              break;
+            }
+          }
+        } catch (_) {
+          isNewer = cleanTag.isNotEmpty && cleanTag != cleanCurrent;
+        }
+
+        if (isNewer) {
+          if (mounted) {
+            _showUpdateDialog(cleanTag, htmlUrl, body);
+          }
+        } else if (manual && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Vous utilisez déjà la dernière version disponible ($appVersion).'),
+              backgroundColor: mint,
+            ),
+          );
+        }
+      } else if (manual && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Impossible de joindre GitHub (Code ${resp.statusCode}).'),
+            backgroundColor: Colors.orangeAccent,
+          ),
+        );
+      }
+    } catch (e) {
+      if (manual && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erreur réseau lors de la vérification : $e'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => isCheckingUpdates = false);
+    }
+  }
+
+  void _showUpdateDialog(String newVersion, String releaseUrl, String notes) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: panel,
+        title: Row(
+          children: [
+            const Icon(Icons.system_update_alt_rounded, color: mint),
+            const SizedBox(width: 10),
+            Text('Mise à jour disponible : $newVersion'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Une nouvelle version ($newVersion) est disponible sur GitHub !'),
+            const SizedBox(height: 10),
+            const Text('Version actuelle installée : $appVersion',
+                style: TextStyle(color: muted, fontSize: 13)),
+            if (notes.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              const Text('Nouveautés :', style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 6),
+              Container(
+                constraints: const BoxConstraints(maxHeight: 180),
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: ink,
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: line),
+                ),
+                child: SingleChildScrollView(
+                  child: Text(notes, style: const TextStyle(fontSize: 12)),
+                ),
+              ),
+            ],
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Plus tard'),
+          ),
+          FilledButton.icon(
+            icon: const Icon(Icons.open_in_browser_rounded, size: 16),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              final target = releaseUrl.isNotEmpty
+                  ? releaseUrl
+                  : 'https://github.com/$githubRepo/releases/latest';
+              if (Platform.isWindows) {
+                await Process.run('cmd', ['/c', 'start', '', target]);
+              }
+            },
+            label: const Text('Mettre à jour'),
+          ),
+        ],
+      ),
+    );
+  }
 }
 class UniversalImportDialog extends StatefulWidget {
   final String base;
