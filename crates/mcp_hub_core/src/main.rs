@@ -2513,6 +2513,7 @@ fn find_ngrok_bin() -> Option<String> {
 }
 
 async fn detect_tailscale_dns(bin: &str) -> Option<String> {
+    // 1. Essayer via `tailscale status --json`
     let mut cmd = Command::new(bin);
     cmd.args(["status", "--json"]);
     #[cfg(windows)]
@@ -2521,14 +2522,61 @@ async fn detect_tailscale_dns(bin: &str) -> Option<String> {
         use std::os::windows::process::CommandExt;
         cmd.creation_flags(0x08000000);
     }
-    let out = cmd.output().await.ok()?;
-    let v: serde_json::Value = serde_json::from_slice(&out.stdout).ok()?;
-    let dns = v
-        .pointer("/Self/DNSName")
-        .and_then(|d| d.as_str())
-        .map(|s| s.trim().trim_end_matches('.'))
-        .filter(|s| !s.is_empty())?;
-    Some(format!("https://{dns}"))
+    if let Ok(out) = cmd.output().await {
+        if let Ok(v) = serde_json::from_slice::<serde_json::Value>(&out.stdout) {
+            if let Some(dns) = v
+                .pointer("/Self/DNSName")
+                .and_then(|d| d.as_str())
+                .map(|s| s.trim().trim_end_matches('.'))
+                .filter(|s| !s.is_empty())
+            {
+                return Some(format!("https://{dns}"));
+            }
+            if let Some(suffix) = v
+                .pointer("/MagicDNSSuffix")
+                .and_then(|d| d.as_str())
+                .map(|s| s.trim().trim_end_matches('.'))
+                .filter(|s| !s.is_empty())
+            {
+                if let Some(host) = v
+                    .pointer("/Self/HostName")
+                    .and_then(|h| h.as_str())
+                    .map(|s| s.trim().to_lowercase())
+                    .filter(|s| !s.is_empty())
+                {
+                    return Some(format!("https://{host}.{suffix}"));
+                }
+            }
+        }
+    }
+
+    // 2. Fallback via `tailscale funnel status` ou `tailscale serve status`
+    for sub in ["funnel", "serve"] {
+        let mut fcmd = Command::new(bin);
+        fcmd.args([sub, "status"]);
+        #[cfg(windows)]
+        {
+            #[allow(unused_imports)]
+            use std::os::windows::process::CommandExt;
+            fcmd.creation_flags(0x08000000);
+        }
+        if let Ok(out) = fcmd.output().await {
+            let text = String::from_utf8_lossy(&out.stdout);
+            for line in text.lines() {
+                if let Some(idx) = line.find("https://") {
+                    let rest = &line[idx..];
+                    let end = rest
+                        .find(|c: char| c.is_whitespace() || c == '/' || c == ')')
+                        .unwrap_or(rest.len());
+                    let url = rest[..end].trim().trim_end_matches('/');
+                    if url.contains(".ts.net") {
+                        return Some(url.to_string());
+                    }
+                }
+            }
+        }
+    }
+    None
 }
 
 // Lance et maintient le tunnel HTTPS permanent vers la passerelle locale (port 7300).
@@ -2726,10 +2774,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut initial_runtime = HashMap::new();
     let mut config_updated = false;
     for srv in &mut initial_config.servers {
-        if !srv.auto_start {
-            srv.auto_start = true;
-            config_updated = true;
-        }
         let persistent_tok = srv
             .connection_token
             .clone()
@@ -2778,18 +2822,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let _ = save(&app_state, &initial_config).await;
     }
 
-    let auto_start_ids: Vec<String> = initial_config
-        .servers
-        .iter()
-        .filter(|s| s.auto_start)
-        .map(|s| s.id.clone())
-        .collect();
-
     // Démarrer automatiquement le tunnel HTTPS global vers la passerelle locale (port 7300)
     tokio::spawn(supervise_hub_tunnel(app_state.clone(), port));
 
-    for id in auto_start_ids {
-        let _ = start(&app_state, &id).await;
+    // Ne démarrer automatiquement les serveurs que si l'option globale `auto_start_all_mcps` est activée
+    if initial_config.auto_start_all_mcps {
+        let auto_start_ids: Vec<String> = initial_config
+            .servers
+            .iter()
+            .map(|s| s.id.clone())
+            .collect();
+        for id in auto_start_ids {
+            let _ = start(&app_state, &id).await;
+        }
     }
 
     let router = Router::new()

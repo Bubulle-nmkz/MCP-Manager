@@ -13,14 +13,48 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
       ::CreateMutexW(nullptr, TRUE, L"Local\\MCPManagerV3SingleInstanceMutex");
   if (single_instance_mutex != nullptr &&
       ::GetLastError() == ERROR_ALREADY_EXISTS) {
-    HWND existing_hwnd = ::FindWindowW(L"FLUTTER_RUNNER_WIN32_WINDOW", L"mcp_hub");
+    HWND existing_hwnd = nullptr;
+    ::EnumWindows(
+        [](HWND hwnd, LPARAM lparam) -> BOOL {
+          wchar_t class_name[256] = {0};
+          if (::GetClassNameW(hwnd, class_name, 256) > 0 &&
+              wcscmp(class_name, L"FLUTTER_RUNNER_WIN32_WINDOW") == 0) {
+            wchar_t title[256] = {0};
+            ::GetWindowTextW(hwnd, title, 256);
+            if (wcsstr(title, L"MCP Manager") != nullptr ||
+                wcsstr(title, L"mcp_hub") != nullptr) {
+              *reinterpret_cast<HWND*>(lparam) = hwnd;
+              return FALSE;
+            }
+          }
+          return TRUE;
+        },
+        reinterpret_cast<LPARAM>(&existing_hwnd));
+
     if (!existing_hwnd) {
-      existing_hwnd = ::FindWindowW(L"FLUTTER_RUNNER_WIN32_WINDOW", L"MCP Manager v3");
+      existing_hwnd = ::FindWindowW(L"FLUTTER_RUNNER_WIN32_WINDOW", nullptr);
     }
     if (existing_hwnd) {
+      DWORD target_pid = 0;
+      DWORD target_tid = ::GetWindowThreadProcessId(existing_hwnd, &target_pid);
+      if (target_pid != 0) {
+        ::AllowSetForegroundWindow(target_pid);
+      }
+      DWORD current_tid = ::GetCurrentThreadId();
+      if (target_tid != 0 && target_tid != current_tid) {
+        ::AttachThreadInput(current_tid, target_tid, TRUE);
+      }
+      ::PostMessageW(existing_hwnd, WM_APP + 0x4D43, 0, 0);
       ::ShowWindow(existing_hwnd, SW_SHOW);
-      ::ShowWindow(existing_hwnd, SW_RESTORE);
+      if (::IsIconic(existing_hwnd)) {
+        ::ShowWindow(existing_hwnd, SW_RESTORE);
+      } else {
+        ::ShowWindow(existing_hwnd, SW_SHOWNORMAL);
+      }
       ::SetForegroundWindow(existing_hwnd);
+      if (target_tid != 0 && target_tid != current_tid) {
+        ::AttachThreadInput(current_tid, target_tid, FALSE);
+      }
     }
     ::CloseHandle(single_instance_mutex);
     return EXIT_SUCCESS;

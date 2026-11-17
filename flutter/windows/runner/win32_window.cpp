@@ -216,6 +216,26 @@ Win32Window::MessageHandler(HWND hwnd,
     case WM_DWMCOLORIZATIONCOLORCHANGED:
       UpdateTheme(hwnd);
       return 0;
+
+    case WM_APP + 0x4D43: {
+      ShowWindow(hwnd, SW_SHOW);
+      if (IsIconic(hwnd)) {
+        ShowWindow(hwnd, SW_RESTORE);
+      } else {
+        ShowWindow(hwnd, SW_SHOWNORMAL);
+      }
+      SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0,
+                   SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+      SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0,
+                   SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+      SetForegroundWindow(hwnd);
+      SetFocus(hwnd);
+      if (child_content_ != nullptr) {
+        ShowWindow(child_content_, SW_SHOW);
+        SetFocus(child_content_);
+      }
+      return 0;
+    }
   }
 
   return DefWindowProc(window_handle_, message, wparam, lparam);

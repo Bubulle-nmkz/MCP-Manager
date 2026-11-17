@@ -121,4 +121,24 @@ if (Test-Path $FlutterExe) {
 Copy-Item $RunnerIco (Join-Path $Dist 'app_icon.ico') -Force
 Copy-Item (Join-Path $Root 'target\release\mcp_hub_core.exe') (Join-Path $Dist 'mcp-hub-core.exe') -Force
 Copy-Item (Join-Path $Root 'README.md') $Dist -Force
+
+# Mettre à jour automatiquement le raccourci sur le Bureau pour qu'il pointe vers le bon exécutable compilé
+try {
+  $DesktopDir = [Environment]::GetFolderPath('Desktop')
+  $WshShell = New-Object -ComObject WScript.Shell
+  foreach ($lnkName in @('MCP Manager.lnk', 'MCP-Manager.lnk')) {
+    $LnkPath = Join-Path $DesktopDir $lnkName
+    if (Test-Path $LnkPath) {
+      $Shortcut = $WshShell.CreateShortcut($LnkPath)
+      $Shortcut.TargetPath = $TargetExe
+      $Shortcut.WorkingDirectory = $Dist
+      $Shortcut.IconLocation = (Join-Path $Dist 'app_icon.ico')
+      $Shortcut.Save()
+      Write-Host "Raccourci Bureau mis à jour : $LnkPath -> $TargetExe"
+    }
+  }
+} catch {
+  Write-Host "Note: mise à jour optionnelle du raccourci ignorée ($_)"
+}
+
 Write-Host "[5/6] Distribution prête avec le nouveau logo partout : $Dist"

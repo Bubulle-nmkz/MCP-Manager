@@ -84,7 +84,7 @@ class _HubHomeState extends State<HubHome> with WindowListener, TrayListener {
   bool autoStartAllServers = false;
   bool hasTriggeredAutoStart = false;
   bool isCheckingUpdates = false;
-  static const String appVersion = 'v1.0.2';
+  static const String appVersion = 'v1.0.3';
   static const String githubRepo = 'Bubulle-nmkz/MCP-Manager';
   String tunnelProvider = 'tailscale';
   final TextEditingController portController = TextEditingController();
@@ -259,12 +259,17 @@ class _HubHomeState extends State<HubHome> with WindowListener, TrayListener {
           setState(() {
             port = j['port'] ?? 7300;
             base = 'http://127.0.0.1:$port';
-            publicBaseUrl = (j['publicBaseUrl'] ?? '').toString();
+            final newPub = (j['publicBaseUrl'] ?? '').toString();
+            final prevPub = publicBaseUrl;
+            publicBaseUrl = newPub;
             if (portController.text.isEmpty) {
               portController.text = '$port';
             }
-            if (publicUrlController.text.isEmpty && publicBaseUrl.isNotEmpty) {
-              publicUrlController.text = publicBaseUrl;
+            if (newPub.isNotEmpty &&
+                (publicUrlController.text.isEmpty ||
+                    publicUrlController.text == prevPub ||
+                    publicUrlController.text.startsWith('http://127.0.0.1'))) {
+              publicUrlController.text = newPub;
             }
             tunnelProvider = (j['tunnelProvider'] ?? 'tailscale').toString();
             enableTunnel = j['enableTunnel'] ?? true;
