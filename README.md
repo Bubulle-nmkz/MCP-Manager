@@ -36,6 +36,7 @@ Normalement, lancer et configurer ces serveurs est très compliqué : il faut ta
    - *Si Windows affiche un écran bleu « Windows a protégé votre ordinateur », cliquez sur **« Informations complémentaires »** puis sur **« Exécuter quand même »**.*
 4. L'installateur installe tout tout seul dans `C:\Program Files\MCP Manager`.
 5. **C'est fini !** Un raccourci avec le beau logo bleu **MCP Manager** apparaît directement sur votre Bureau.
+6. Pour que l'application fonctionne et que ça soit confortable installez [Tailscale Funnel](https://github.com/Bubulle-nmkz/MCP-Manager/blob/main/README.md#-guide-complet--configurer-tailscale-funnel-pas-à-pas-pour-les-débutants)
 
 ---
 
@@ -91,26 +92,33 @@ Votre ordinateur est chez vous, protégé par votre Box Internet. Les IA sur le 
 
 1. Ouvrez votre tableau de bord sur Internet : **[https://login.tailscale.com/admin/dns](https://login.tailscale.com/admin/dns)**.
 2. Vérifiez que **« MagicDNS »** est bien activé (c'est activé par défaut).
-3. Allez dans l'onglet **Access Controls (ACL)** : [https://login.tailscale.com/admin/acls](https://login.tailscale.com/admin/acls).
-4. Ajoutez la permission `node:funnel` si ce n'est pas déjà fait :
-```json
-"nodeAttrs": [
-  {
-    "target": ["autogroup:member"],
-    "attr": ["funnel"]
-  }
-]
+3. Vérifier qu'il n'y a pas de Funnel d'ouvert avec cette commande powershell :
+```powershell
+tailscale funnel status
 ```
+4. Normalement la commande devrait retourner "No serve config" ou quelque chose de similaire, si ce n'est pas le cas
+   aller directement à l'étape pour [supprimer le serveur funnel](https://github.com/Bubulle-nmkz/MCP-Manager/blob/main/README.md#supprimer-le-funnel)
+5. Pour créer et ouvrir le funnel il va falloir faire cette commande powershell :
+```powershell
+& "C:\Program Files\Tailscale\tailscale.exe" funnel --bg 7300
+```
+6. Normalement une URL devrait s'afficher maintenant, copier cette URL
+7. Une fois l'URL copiée, aller dans l'application "MCP Manager" et aller dans l'onglet "Réglages", dans "URL publique permanente" si il y a toujours
+   une URL locale qui est affichée alors remplacée là par l'URL copiée précédemment et enregistrer
+8. Une fois cela fait vous pourrez gérer et utiliser autant de MCP que vous voudrez.
 
-### Étape 4 : Activer le Funnel dans MCP Manager
-1. Ouvrez **MCP Manager** sur votre Bureau.
-2. Allez dans l'onglet **« Tailscale Funnel »** à gauche.
-3. Vous y trouverez le statut en direct de Tailscale :
-   - Si Tailscale est lancé sur votre PC, MCP Manager détecte automatiquement votre nom de machine (ex: `mon-pc.tailnet.ts.net`).
-4. Cliquez sur **« Activer le Funnel HTTPS »**.
-5. MCP Manager vous donne alors votre adresse web publique sécurisée, par exemple :
-   `https://mon-pc.tailnet.ts.net/mcp/mon-serveur`
-6. Vous pouvez copier cette adresse et la coller directement dans votre client IA (Mammouth AI, Claude, etc.) !
+### Supprimer le funnel
+Si vous souhaitez supprimer le funnel voici les étapes à suivre :
+1. Ouvrez powershell et rentrer cette commande :
+```powershell
+& "C:\Program Files\Tailscale\tailscale.exe" funnel reset
+```
+2. Pour vérifier que le funnel et bien été supprimé faite cette commande :
+```powershell
+tailscale funnel status
+```
+3. Si il n'y a plus aucun funnel il devrait y avoir d'afficher "No serve config" ou quelque chose de similaire
+4. Et voilà le funnel a été supprimé
 
 ---
 
