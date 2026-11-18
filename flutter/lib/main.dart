@@ -32,7 +32,7 @@ class HubApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) => MaterialApp(
         debugShowCheckedModeBanner: false,
-        title: 'MCP Manager v3',
+        title: 'MCP Manager',
         theme: ThemeData(
           useMaterial3: true,
           brightness: Brightness.dark,
@@ -84,7 +84,7 @@ class _HubHomeState extends State<HubHome> with WindowListener, TrayListener {
   bool autoStartAllServers = false;
   bool hasTriggeredAutoStart = false;
   bool isCheckingUpdates = false;
-  static const String appVersion = 'v1.0.3';
+  static const String appVersion = 'v1.0.4';
   static const String githubRepo = 'Bubulle-nmkz/MCP-Manager';
   String tunnelProvider = 'tailscale';
   final TextEditingController portController = TextEditingController();
@@ -392,6 +392,43 @@ class _HubHomeState extends State<HubHome> with WindowListener, TrayListener {
     if (result != null) await _save(result);
   }
 
+  Future<void> _syncClaudeDesktop() async {
+    try {
+      final r = await http.post(
+        Uri.parse('$base/admin/sync-claude'),
+        headers: headers,
+      );
+      if (!mounted) return;
+      if (r.statusCode == 200) {
+        final data = jsonDecode(r.body);
+        final path = data['path'] ?? '%APPDATA%\\Claude\\claude_desktop_config.json';
+        final count = data['syncedCount'] ?? servers.length;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: panelAlt,
+            duration: const Duration(seconds: 5),
+            content: Text(
+              '✅ $count MCP synchronisé(s) automatiquement dans Claude Desktop ($path) ! Redémarrez Claude Desktop pour les voir.',
+              style: const TextStyle(color: mint, fontWeight: FontWeight.w600),
+            ),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erreur de synchronisation Claude : ${r.body}'),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erreur : $e')),
+        );
+      }
+    }
+  }
+
   Future<void> _export(bool claude) async {
     final config = claude
         ? {
@@ -567,7 +604,7 @@ class _HubHomeState extends State<HubHome> with WindowListener, TrayListener {
             children: [
               Text(
                 page == 'overview'
-                    ? 'MCP Manager v3'
+                    ? 'MCP Manager'
                     : page == 'logs'
                         ? 'Journaux en direct'
                         : 'Paramètres de la passerelle',
@@ -681,6 +718,24 @@ class _HubHomeState extends State<HubHome> with WindowListener, TrayListener {
                   hintText: 'Rechercher un MCP…',
                   prefixIcon: Icon(Icons.search, size: 18),
                   contentPadding: EdgeInsets.zero,
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            FilledButton.tonalIcon(
+              onPressed: _syncClaudeDesktop,
+              icon: const Icon(Icons.sync_rounded, size: 17, color: mint),
+              label: const Text(
+                'Installer sur Claude Desktop (1-clic)',
+                style: TextStyle(color: mint, fontWeight: FontWeight.w700),
+              ),
+              style: FilledButton.styleFrom(
+                backgroundColor: panel,
+                side: const BorderSide(color: line),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 13, vertical: 14),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
                 ),
               ),
             ),
@@ -805,7 +860,7 @@ class _HubHomeState extends State<HubHome> with WindowListener, TrayListener {
     final displayUrl = kind == 'remote' ? mammouthUrl : fixedUrl;
     final urlLabel = kind == 'remote' ? 'URL MAMMOUTH :' : 'URL FIXE :';
     final kindLabel = kind == 'local_http'
-        ? 'HTTP SERVEUR'
+        ? 'HTTPS SERVEUR'
         : kind == 'remote'
             ? 'DISTANT HTTPS'
             : 'LOCAL STDIO';
